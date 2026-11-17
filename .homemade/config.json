@@ -2,13 +2,14 @@
   "$schema": "https://homemade.dev/schemas/latest/config.json",
   "setup": [
     "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential libpq-dev libyaml-dev libssl-dev zlib1g-dev libffi-dev libvips postgresql-client redis-tools",
-    "bash -o pipefail -c 'mkdir -p /opt/hostedtoolcache/Ruby/3.4.4 && curl -fsSL --retry 3 https://github.com/ruby/ruby-builder/releases/download/toolcache/ruby-3.4.4-ubuntu-24.04.tar.gz | tar -xz -C /opt/hostedtoolcache/Ruby/3.4.4 && for tool in ruby gem bundle bundler irb rake; do ln -sf /opt/hostedtoolcache/Ruby/3.4.4/x64/bin/$tool /usr/local/bin/$tool; done && /usr/local/bin/gem install bundler -v 2.6.9 --no-document'"
+    "bash -o pipefail -c 'mkdir -p /opt/hostedtoolcache/Ruby/3.4.4 && curl -fsSL --retry 3 https://github.com/ruby/ruby-builder/releases/download/toolcache/ruby-3.4.4-ubuntu-24.04.tar.gz | tar -xz -C /opt/hostedtoolcache/Ruby/3.4.4 && for tool in ruby gem bundle bundler irb rake; do ln -sf /opt/hostedtoolcache/Ruby/3.4.4/x64/bin/$tool /usr/local/bin/$tool; done && RUBY_TCP_NO_FAST_FALLBACK=1 /usr/local/bin/gem install bundler -v 2.6.9 --no-document'"
   ],
   "warmup": [
-    "bundle config set --local path vendor/bundle && bundle config set --local frozen true && bundle install --jobs 4 && npm ci"
+    "bundle config set --local path vendor/bundle && bundle config set --local frozen true && (bundle check || bundle install --jobs 4 --retry 3) && npm ci --prefer-offline --no-audit --no-fund",
+    "docker pull postgres:16 && docker pull redis:7-alpine"
   ],
   "install": [
-    "bundle config set --local path vendor/bundle && bundle config set --local frozen true && bundle install --jobs 4 && npm ci",
+    "bundle config set --local path vendor/bundle && bundle config set --local frozen true && (bundle check || bundle install --jobs 4 --retry 3) && npm ci --prefer-offline --no-audit --no-fund",
     "bundle exec rails tailwindcss:build"
   ],
   "services": {
@@ -48,6 +49,10 @@
     "POSTGRES_PASSWORD",
     "REDIS_URL",
     "SECRET_KEY_BASE",
-    "BUNDLE_FROZEN"
+    "BUNDLE_FROZEN",
+    {
+      "key": "RUBY_TCP_NO_FAST_FALLBACK",
+      "warmup": true
+    }
   ]
 }
