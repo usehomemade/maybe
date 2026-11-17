@@ -1,0 +1,53 @@
+{
+  "$schema": "https://homemade.dev/schemas/latest/config.json",
+  "setup": [
+    "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential libpq-dev libyaml-dev libssl-dev zlib1g-dev libffi-dev libvips postgresql-client redis-tools",
+    "bash -o pipefail -c 'mkdir -p /opt/hostedtoolcache/Ruby/3.4.4 && curl -fsSL --retry 3 https://github.com/ruby/ruby-builder/releases/download/toolcache/ruby-3.4.4-ubuntu-24.04.tar.gz | tar -xz -C /opt/hostedtoolcache/Ruby/3.4.4 && for tool in ruby gem bundle bundler irb rake; do ln -sf /opt/hostedtoolcache/Ruby/3.4.4/x64/bin/$tool /usr/local/bin/$tool; done && /usr/local/bin/gem install bundler -v 2.6.9 --no-document'"
+  ],
+  "warmup": [
+    "bundle config set --local path vendor/bundle && bundle config set --local frozen true && bundle install --jobs 4 && npm ci"
+  ],
+  "install": [
+    "bundle config set --local path vendor/bundle && bundle config set --local frozen true && bundle install --jobs 4 && npm ci",
+    "bundle exec rails tailwindcss:build"
+  ],
+  "services": {
+    "db": {
+      "cmd": "docker start -a maybe-postgres || docker run --name maybe-postgres -e POSTGRES_USER -e POSTGRES_PASSWORD -v maybe-postgres-data:/var/lib/postgresql/data -p 5432:5432 postgres:16",
+      "port": 5432,
+      "displayName": "Postgres"
+    },
+    "redis": {
+      "cmd": "docker start -a maybe-redis || docker run --name maybe-redis -v maybe-redis-data:/data -p 6379:6379 redis:7-alpine",
+      "port": 6379,
+      "displayName": "Redis"
+    },
+    "web": {
+      "cmd": "timeout 120 sh -c 'until pg_isready -h 127.0.0.1 -p 5432 -q; do sleep 1; done' && timeout 120 sh -c 'until redis-cli -h 127.0.0.1 ping | grep -q PONG; do sleep 1; done' && bundle exec rails db:prepare && exec bundle exec rails server -b 0.0.0.0 -p \"$PORT\"",
+      "port": 3000,
+      "url": true,
+      "healthcheck": {
+        "path": "/"
+      },
+      "displayName": "Rails"
+    },
+    "css": {
+      "cmd": "exec bundle exec rails 'tailwindcss:watch[always]'",
+      "displayName": "Tailwind CSS"
+    },
+    "worker": {
+      "cmd": "timeout 180 sh -c 'until curl -fsS --max-time 2 -o /dev/null http://127.0.0.1:3000/up; do sleep 1; done' && exec bundle exec sidekiq",
+      "displayName": "Sidekiq"
+    }
+  },
+  "env_schema": [
+    "RAILS_ENV",
+    "SELF_HOSTED",
+    "DATABASE_URL",
+    "POSTGRES_USER",
+    "POSTGRES_PASSWORD",
+    "REDIS_URL",
+    "SECRET_KEY_BASE",
+    "BUNDLE_FROZEN"
+  ]
+}
